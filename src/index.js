@@ -1,29 +1,24 @@
 const express = require('express');
-const { createServer } = require('http');
-const { Server } = require('socket.io');
+const http = require('http');
+const WebSocket = require('ws');
 
 const app = express();
-const server = createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
-});
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-io.on('connection', (socket) => {
-  console.log('Player connected');
-
-  socket.on('playerMove', (data) => {
-    console.log('Move:', data);
-    io.emit('updateGameState', { message: 'Game updated!' });
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Player disconnected');
+// WebSocket connection
+wss.on('connection', (ws) => {
+  console.log('Client connected');
+  ws.on('message', (message) => {
+    console.log('received: %s', message);
+    ws.send('Hello from server!');
   });
 });
 
-server.listen(3000, () => {
-  console.log('WebSocket server running on port 3000');
+app.get('/', (req, res) => {
+  res.send('WebSocket server is running!');
+});
+
+server.listen(process.env.PORT || 3000, () => {
+  console.log('Server is running...');
 });
