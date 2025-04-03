@@ -40,9 +40,8 @@ wss.on('connection', (ws) => {
     if (data?.type == 'joinGame') {
       const game = games.find((g) => g.id === data.gameId);
       if (game) {
-        const playerID = Math.random().toString(36).substring(2, 15);
         const player = {
-          id: playerID,
+          id: data.fingerprint,
           name: data.playerName,
           score: 0,
         }
