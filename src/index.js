@@ -41,12 +41,13 @@ wss.on('connection', (ws) => {
       const game = games.find((g) => g.id === data.gameId);
       if (game) {
         const playerID = Math.random().toString(36).substring(2, 15);
-        game.players.push({
+        const player = {
           id: playerID,
           name: data.playerName,
           score: 0,
-        })
-        ws.send(JSON.stringify({ type: 'joinedGame', gameId: data.gameId }));
+        }
+        game.players.push(player)
+        ws.send(JSON.stringify({ type: 'joinedGame', gameId: data.gameId, player }));
         wss.clients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'game', game }));
@@ -73,7 +74,11 @@ wss.on('connection', (ws) => {
       const game = games.find((g) => g.id === data.gameId);
       if (game) {
         const { clueId } = data;
-        game.clues = game.clues.filter((clue) => clue.id !== clueId);
+        console.log('Clearing clue:', clueId);
+        const clue = game.clues.find((c) => c.id === clueId);
+        if (clue) {
+          clue.active = false;
+        }
         wss.clients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'game', game }));
@@ -87,6 +92,7 @@ wss.on('connection', (ws) => {
       if (game) {
         const player = game.players.find((p) => p.id === data.playerId);
         if (player) {
+          console.log('Updating score for player:', player.id, data.score);
           player.score += data.score;
           wss.clients.forEach((client) => {
             if (client.readyState === WebSocket.OPEN) {
