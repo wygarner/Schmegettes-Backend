@@ -8,6 +8,41 @@ const wss = new WebSocket.Server({ server });
 
 let games = []; // Store active games
 
+let timers = {};
+
+function broadcast(gameId, message) {
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ ...message, gameId }));
+    }
+  });
+}
+
+function startGameTimer(gameId, duration = 30) {
+  let timeLeft = duration;
+
+  const interval = setInterval(() => {
+    timeLeft--;
+    broadcast(gameId, { type: 'timerUpdate', timeLeft });
+
+    if (timeLeft <= 0) {
+      clearInterval(timers[gameId]);
+      delete timers[gameId];
+    }
+  }, 1000);
+
+  timers[gameId] = interval;
+}
+
+function pauseGameTimer(gameId) {
+  clearInterval(timers[gameId]);
+}
+
+function resumeGameTimer(gameId, currentTimeLeft) {
+  startGameTimer(gameId, currentTimeLeft);
+}
+
+
 // WebSocket connection
 wss.on('connection', (ws) => {
   console.log('Client connected');
@@ -44,6 +79,7 @@ wss.on('connection', (ws) => {
           id: data.fingerprint,
           name: data.playerName,
           score: 0,
+          isTurn: false,
         }
         game.players.push(player)
         ws.send(JSON.stringify({ type: 'joinedGame', gameId: data.gameId, player }));
@@ -61,6 +97,7 @@ wss.on('connection', (ws) => {
         game.active = true;
         game.clues = data.clues;
         game.activeRound = 1;
+        game.players[0].isTurn = true;
         wss.clients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'gameStarted', gameId: data.gameId }));
@@ -81,6 +118,7 @@ wss.on('connection', (ws) => {
         wss.clients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'game', game }));
+            client.send(JSON.stringify({ type: 'clueSelected', clue, game }));
           }
         });
       }
@@ -101,6 +139,71 @@ wss.on('connection', (ws) => {
         }
       }
     }
+
+    if (data?.type == 'endPlayerTurn') {
+      const game = games.find((g) => g.id === data.gameId);
+      if (game) {
+        const player = game.players.find((p) => p.id === data.playerId);
+        if (player) {
+          player.isTurn = false;
+          const nextPlayerIndex = (game.players.indexOf(player) + 1) % game.players.length;
+          game.players[nextPlayerIndex].isTurn = true;
+          wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ type: 'game', game }));
+            }
+          });
+        }
+      }
+    }
+
+    if (data?.type == 'disqualifyPlayer') {
+      const game = games.find((g) => g.id === data.gameId);
+      if (game) {
+        const player = game.players.find((p) => p.id === data.playerId);
+        if (player) {
+          console.log('Disqualifying player:', player.id);
+          player.disqualified = true;
+          wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ type: 'game', game }));
+            }
+          });
+        }
+      }
+    }
+
+    if (data?.type == 'requalifyAllPlayers') {
+      const game = games.find((g) => g.id === data.gameId);
+      if (game) {
+        game.players.forEach((player) => {
+          player.disqualified = false;
+        });
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'game', game }));
+          }
+        });
+      }
+    }
+
+    if (data.type === 'startTimer') {
+      startGameTimer(data.gameId, data.duration);
+    }
+
+    if (data.type === 'pauseTimer') {
+      pauseGameTimer(data.gameId);
+    }
+
+    if (data.type === 'resumeTimer') {
+      resumeGameTimer(data.gameId, data.timeLeft);
+    }
+
+    if (data.type === 'stopTimer') {
+      pauseGameTimer(data.gameId);
+      delete timers[data.gameId];
+    }
+    
 
   });
 });
