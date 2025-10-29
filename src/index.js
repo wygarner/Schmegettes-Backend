@@ -183,10 +183,31 @@ wss.on('connection', (ws) => {
       }
     }
 
+    if (data?.type == 'startResponseTimer') {
+      const game = games.find((g) => g.id === data.gameId);
+      if (game) {
+        game.responseTimer = data.duration;
+        game.playerSpeaking = data.playerId;
+        const interval = setInterval(() => {
+          const timeLeft = game.responseTimer;
+          if (timeLeft > 0) game.responseTimer -= 1;
+          wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ type: 'game', game }));
+            }
+          });
+          if (timeLeft <= 0) {
+            clearInterval(interval);
+            game.playerSpeaking = null;
+          }
+        }, 1000);
+        game.responseTimerInterval = interval;
+      }
+    }
+
     if (data?.type == 'pauseTimer') {
       const game = games.find((g) => g.id === data.gameId);
       if (game) {
-        game.playerSpeaking = data.playerId;
         clearInterval(game.timerInterval);
         wss.clients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN) {
@@ -195,7 +216,18 @@ wss.on('connection', (ws) => {
         });
       }
     }
-    
+
+    if (data?.type == 'pauseResponseTimer') {
+      const game = games.find((g) => g.id === data.gameId);
+      if (game) {
+        clearInterval(game.responseTimerInterval);
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'game', game }));
+          }
+        });
+      }
+    }
   });
 });
 
